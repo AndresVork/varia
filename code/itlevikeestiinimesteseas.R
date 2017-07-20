@@ -1,24 +1,69 @@
-## Andres Võrk, 20.juuli 2017 
+## Andres Võrk, 21.juuli 2017 
 ## https://github.com/AndresVork/varia
-## kasutab ideid Ilya Kashnitsky lehelt https://gist.github.com/ikashnitsky
 
 # puhastab keskkonna
 rm(list = ls(all = TRUE))
 
 #lae paketid
 library(ggplot2) 
-library(forcats) #funktsiooni fct_rev() jaoks
-library(ggjoy)
-library(viridis)
-library(extrafont)
 
 #andmed on võetud ESA andmebaasist
 setwd("C:\\Users\\avork\\Documents\\GitHub\\varia\\")
 
 #Maakondade lõikes internetiühendusega leibkondade osakaalud
-df <- read.csv(".\\data\\IT201sm.csv", sep=";", header=FALSE)
-df$value <-  as.numeric(as.character(df$V3))
-df %>% 
+df1 <- read.csv(".\\data\\IT201sm.csv", sep=";", header=FALSE)
+df1$value <-  as.numeric(as.character(df1$V3))
+
+p <-  df1 %>% 
+  select(-V3) %>% 
+  na.omit(df) %>% 
+  #aastad kasvavas järjekorras
+  ggplot(aes(as.factor(V1), value))+
+  geom_boxplot() +
+  #pealkirjad
+  labs(y = "Internetiühendusega leibkondade osatähtsus, %",
+       x = "",
+       title = "Internetiühendusega leibkondade jaotus üle maakondade",
+       subtitle = "Andmed: Statistikaamet, tabel IT201",
+       caption = "\nJaotus on joonistatud maakondade ja Tallinna väärtuste keskmiste põhjal \njoonise andmed ja kood: https://github.com/AndresVork/varia")+
+  #teksti suurus ja tüüp
+  theme_minimal(base_size = 8)
+p
+ggsave("joonis1.png", plot=p)
+
+#Interneti kasutavate inimeste osakaalud
+df2 <- read.csv(".\\data\\IT32sm.csv", sep=";", header=FALSE)
+q <-  df2 %>% 
+  filter(V1=="Interneti kasutamine") %>% 
+  select(-V3, -V1) %>%
+  na.omit(df) %>% 
+  #aastad kasvavas järjekorras
+  ggplot(aes(as.factor(V2), V4))+
+  geom_boxplot() +
+  #pealkirjad
+  labs(y = "Interneti kasutajate osakaal, %",
+       x = "Aasta",
+       title = "Interneti kasutajate osakaalu jaotus üle sotsiaaldemograafiliste rühmade",
+       subtitle = "Andmed: Statistikaamet, tabel IT32",
+       caption = "\nJaotus on joonistatud erinevate (osaliselt kattuvate) sotsiaaldemograafiliste rühmade keskmiste põhjal \njoonise andmed ja kood: https://github.com/AndresVork/varia")+
+  #teksti suurus ja tüüp
+  theme_minimal(base_family =  "Roboto Condensed", base_size = 8)
+  #legend välja
+#  theme(legend.position = "none")
+q
+ggsave("joonis2.png", plot=q)
+
+
+
+########################
+#teised joonised
+library(forcats) #funktsiooni fct_rev() jaoks
+library(ggjoy)
+library(viridis)
+library(extrafont)
+
+#geom_joy
+p <-  df1 %>% 
   select(-V3) %>% 
   na.omit(df) %>% 
   #aastad kasvavas järjekorras
@@ -31,17 +76,17 @@ df %>%
   #pealkirjad
   labs(x = "Internetiühendusega leibkondade osatähtsus, %",
        y = "Aasta",
-       title = "Internetiühendusega leibkondade keskmise osatähtsuse jaotus üle maakondade",
+       title = "Internetiühendusega leibkondade jaotus üle maakondade",
        subtitle = "Andmed: Statistikaamet, tabel IT201",
-       caption = "\nTihedusfunktsioonid on hinnatud maakondade ja Tallinna väärtuste põhjal \njoonise idee: ikashnitsky.github.io")+
+       caption = "\nTihedusfunktsioonid on hinnatud maakondade ja Tallinna väärtuste keskmiste põhjal \njoonise andmed ja kood: https://github.com/AndresVork/varia")+
   #teksti suurus ja tüüp
-  theme_minimal(base_family =  "Roboto Condensed", base_size = 15)+
+  theme_minimal(base_size = 8)+
   #legend välja
   theme(legend.position = "none")
+p
+ggsave("joonis1_density.png", plot=p)
 
-#Interneti kasutavate inimeste osakaalud
-df <- read.csv(".\\data\\IT32sm.csv", sep=";", header=FALSE)
-df %>% 
+q <-  df2 %>% 
   filter(V1=="Interneti kasutamine") %>% 
   select(-V3, -V1) %>%
   na.omit(df) %>% 
@@ -51,7 +96,7 @@ df %>%
   geom_joy(aes(fill = as.factor(V2)))+
   #valib värvid jm
   scale_fill_viridis(discrete = T, option = "D", direction = -1, 
-                     begin = .1, end = .9)+
+                     begin = 0, end = 1)+
   #pealkirjad
   labs(x = "Interneti kasutajate osakaal, %",
        y = "Aasta",
@@ -59,6 +104,29 @@ df %>%
        subtitle = "Andmed: Statistikaamet, tabel IT32",
        caption = "\nTihedusfunktsioonid on joonistatud erinevate (osaliselt kattuvate) sotsiaaldemograafiliste rühmade keskmiste põhjal \njoonise andmed ja kood: https://github.com/AndresVork/varia")+
   #teksti suurus ja tüüp
-  theme_minimal(base_family =  "Roboto Condensed", base_size = 15)+
+  theme_minimal(base_family =  "Roboto Condensed", base_size = 8)+
   #legend välja
   theme(legend.position = "none")
+q
+
+ggsave("joonis2density.png", plot=q)
+
+#histogram
+df2 %>% 
+  filter(V1=="Interneti kasutamine") %>% 
+  select(-V3, -V1) %>%
+  na.omit(df2) %>% 
+  #aastad kasvavas järjekorras
+  ggplot(aes(x = V4))+
+  geom_histogram(binwidth = 10)  +
+  facet_wrap(~V2, ncol=1)
+
+#violin
+df2 %>% 
+  filter(V1=="Interneti kasutamine") %>% 
+  select(-V3, -V1) %>%
+  na.omit(df2) %>% 
+  #aastad kasvavas järjekorras
+  ggplot(aes(as.factor(V2), V4))+
+  #geom_violin(fill="blue")
+  geom_violin()
