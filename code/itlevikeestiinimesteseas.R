@@ -2,7 +2,7 @@
 ## https://github.com/AndresVork/varia
 ## kasutab ideid Ilya Kashnitsky lehelt https://gist.github.com/ikashnitsky
 
-# Kustuta kõik mälust
+# puhastab keskkonna
 rm(list = ls(all = TRUE))
 
 #lae paketid
