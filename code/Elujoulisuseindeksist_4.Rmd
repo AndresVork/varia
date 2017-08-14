@@ -1,0 +1,448 @@
+---
+title: "Elujõulisuse indeksist"
+author: "Andres Võrk"
+date: "`r format(Sys.time(), '%d. %B %Y')`"
+output: 
+  html_document:
+    number_sections: TRUE
+---
+<style type="text/css">
+
+body{ /* Normal  */
+      font-size: 14px;
+  }
+td {  /* Table  */
+  font-size: 8px;
+}
+h1.title {
+  font-size: 24px;
+  color: DarkRed;
+}
+h1 { /* Header 1 */
+  font-size: 20px;
+  color: DarkBlue;
+}
+h2 { /* Header 2 */
+    font-size: 18px;
+  color: DarkBlue;
+}
+h3 { /* Header 3 */
+  font-size: 16px;
+  color: DarkBlue;
+}
+code.r{ /* Code block */
+    font-size: 14px;
+}
+pre { /* Code block - determines code spacing between lines */
+    font-size: 14px;
+}
+</style>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r, include=FALSE}
+library(data.table)
+library(dplyr)
+library(eurostat)
+library(ggplot2)
+
+datapath="C:\\Users\\avork\\Documents\\CITIS\\EMTA\\Mikroandmed\\"
+
+```
+
+Käesolev kirjutis võtab kokku tausta *ettevõtete elujõulisuse* indeksi teemal ning teeb näitearvutused EMTA TSD ja KMD deklaratsioonide põhjal.
+
+# Seni kasutatud metoodika 
+## Ettevõtete demograafia (sünnid ja surmad)
+Elujõulisuse analüüsi üks suund keskendub ettevõtete demograafiale: ettevõtete sünd, elulemus ja surm. Ettevõtete *elujõulisuse* all mõeldakse sel juhul ettevõtete ellujäämist järgnevate aastate jooksul.
+
+### Eurostat
+Eurostat avaldab regulaarset statistikat ettevõtete demograafia (_enterprice demographics_) kohta kõikides riikides. 
+Nende [andmebaasis](http://appsso.eurostat.ec.europa.eu/nui/show.do?dataset=bd_9bd_sz_cl_r2&lang=en) on avaldatud palju sellekohaseid näitajaid ettevõtete suuruse, sektori ja juriidilise vormi lõikes. Paar näitejoonist allosas.
+
+
+```{r andmedeurostatist, eval=FALSE, include=FALSE}
+#suur fail!  
+eu <- get_eurostat("bd_9bd_sz_cl_r2", stringsAsFactors = FALSE)
+eu2 <-  eu %>% filter((geo %in% c("EE", "FI")) & (indic_sb %in% c("V97045", "V97144")) & nace_r2=="B-N_X_K642") %>% as.data.frame()
+#V97045|Survival rate 5: number of enterprises in the reference period (t) newly born in t-5 having survived to t divided by the number of enterprise births in t-5
+ #Jätame alles vaatlused alates 2003
+save(eu2, file="C:/Users/avork/Documents/CITIS/EMTA/Elujoulisus/elujoulisus.Rda")
+
+```
+
+```{r naide, echo=FALSE}
+load(file="C:/Users/avork/Documents/CITIS/EMTA/Elujoulisus/elujoulisus.Rda")
+     
+ggplot(eu2[eu2$sizeclas=="TOTAL" &eu2$indic_sb=="V97045",], aes(x=time, y=values)) +
+  geom_bar(aes(fill=geo), stat="identity", position=position_dodge())+
+  scale_x_date(date_breaks = "1 year" ,date_labels = "%Y") +
+  labs(title="Survival rate: number of enterprises in the reference period (t) \nnewly born in (t-5) having survived to (t) \ndivided by the number of enterprise births in (t-5)") +
+  theme(title=element_text(size=10))
+
+ggplot(eu2[eu2$sizeclas=="TOTAL" &eu2$indic_sb=="V97144",], aes(x=time, y=values)) +
+  geom_bar(aes(fill=geo), stat="identity", position=position_dodge())+
+  scale_x_date(date_breaks = "1 year" ,date_labels = "%Y") +
+  labs(title="Four-year old enterprises employment growth rate: \nnumber of persons employed in the reference period (t) among enterprises newly born in (t-4) \nhaving survived to t divided by the number of persons employed in (t-4) \nby the same enterprises, expressed as a percentage growth rate") +
+  theme(title=element_text(size=10))
+
+```
+
+
+Eurostatil on ka põhjalikum veebis avaldatud raport [Statistics on enterprise survival and growth prospects between 2008 and 2012](http://ec.europa.eu/eurostat/statistics-explained/index.php/Micro_data_linking_in_business_statistics), mis kasutas nende projekti "2015 European microdata linking project". 
+
+Projektis tuuakse välja muuhulgas eksportivate ettevõtete dünaamika klassifikatsioon, mida võib olla saab ka EMTA andmetel reprodutseerida, kui meil peaks olema soovi.
+
+*Table. Types of export profiles 2008-2012 by size class in 2008*
+
+| Export     status     | N       | % of total     | Micro   | Small  | Medium | Large | Micro     | Small     | Medium         | Large      |
+|-----------------------|---------|----------------|---------|--------|--------|-------|-----------|-----------|----------------|------------|
+| Non-Exporter          | 1903627 |         96,3   | 1763688 | 120487 | 16466  | 2986  |   92,6    |     6,3   |         0,9    |     0,2    |
+| Stopped  exporting    | 18830   |           1,0  | 14036   | 3758   | 882    | 154   |     74,5  |     20,0  |           4,7  |       0,8  |
+| Started   exporting   | 19329   |           1,0  | 13720   | 4564   | 876    | 169   |     71,0  |     23,6  |           4,5  |       0,9  |
+| Exporter   throughout | 35094   |           1,8  | 16426   | 11432  | 5675   | 1561  |     46,8  |     32,6  |         16,2   |       4,4  |
+
+
+### Statistikaamet
+
+Statistikaamet avaldab analoogselt Eurostatiga ettevõtluse demograafia statistikat: ettevõtete sünd, surm ja elujõulisus.Vt [metoodikat](http://pub.stat.ee/px-web.2001/Database/Majandus/10Majandusuksused/03Ettevetluse_demograafia/ER_34.htm)
+
+Ettevõtluse demograafia statistika valdkonnas vaadeldakse mittefinantsteenuseid tootvaid ja finantsvahendusega tegelevaid äriühinguid (Eesti majanduse tegevusalade klassifikaator (EMTAK), tegevusalad B kuni S) ning 20 ja enama hõivatud töötajaga füüsilisest isikust ettevõtjaid. Vastavalt EUROSTATis välja töötatud metoodikale põllumajandusega tegelevaid äriühinguid ja ettevõtjaid see statistika valdkond ei hõlma.
+
+Metoodikast detail: ettevõtte sünniks ei loeta juhtumit, kus ajutiselt mittetegutsev ettevõte taasalustab tegevust kahe aasta jooksul pärast tegevuse peatamist.
+(Endale: _Uurida: kuidas on defineeritud ettevõtte lõpetamine?_)
+
+Statistikaamet on avaldanud ettevõtete ellujäämist ka 5 aasta jooksul, vt ["ER401: 2001. AASTAL SÜNDINUD ETTEVÕTETE ELUJÕULISUS TEGEVUSALA JÄRGI (2002-2006)" ](http://pub.stat.ee/px-web.2001/Dialog/varval.asp?ma=ER401&ti=2001.+AASTAL+S%DCNDINUD+ETTEV%D5TETE+ELUJ%D5ULISUS+TEGEVUSALA+J%C4RGI&path=../Database/Majandus/10Majandusuksused/03Ettevetluse_demograafia/&lang=2).
+
+
+Statistikaameti ühes kirjutises [EESTI STATISTIKA KVARTALIKIRI. 4/12. "ETTEVÕTLUSE DEMOGRAAFIA"](https://www.stat.ee/dokumendid/67460) on eraldi defineeritud veel kiiresti arenenud ettevõtted: ettevõtted, kes tegutsesid 2007. aastal, kelle töötajate arv oli vähemalt 5 töötajat ja kelle töötajate arv või müügitulu suurenes kolme järjestikuse tegutsemisaasta (2007-2010) jooksul vähemalt 20%. Müügitulu tunduvalt suurendanud ettevõtteid oli 872 ja töötajate arvu 392 ettevõtet 2010. aastaks. Eraldi defineeritakse gasellid: eelmisest seltskonnast need ettevõtted, kes loodi 2005. või 2006. aastal ja kes ajavahemikul 2007–2010 kiiresti arenesid. Neid oli vastavalt vastavalt 176 (suurendasid müügitulu) ja 101 (suurendasid töötajate arvu).
+
+
+## Ettevõtete edukus
+Lisaks ettevõtete demograafianäitajatele kasutavad erinevad asutused ka muid ettevõtete edukust iseloomustavaid näitajaid.
+
+### Kaubandus-Tööstuskoda ja Konjunktuuriinstituut
+Eesti Kaubandus-Tööstuskoda koostab igal aastal ettevõtete konkurentsivõime edetabelit. Selle jaoks on Eesti Konjunktuuriinstituut  koostanud [Ettevõtete konkurentsivõime edetabeli koostamise juhised](http://www.ettevotluskonkurss.ee/public/Ettevotete_konkurentsivoime_METOODIKA_2016.pdf).
+
+Metoodika järgi kasutatakse ettevõtte konkurentsivõime seiramiseks järgmisi valdkondi ja statistilisi näitajaid:
+
+  - müügitulu
+    - kaupade, teenuste müügitulu aruandeaastal,€
+    - müügitulu muutumine võrreldes eelmise aastaga,%
+  - aruandeaasta kasum
+    - kasum aruandeaastal,€
+    - kasumi muutumine võrreldes eelmise aastaga, %
+  - töötajate arv ja tööjõukulu
+    - keskmine tööjõukulu ühe töötaja kohta aruandeaastal kuus, €
+    - tootlikkus ühe töötaja kohta aastas,€
+  - investeeringud
+    - investeeringud aruandeaastal, €
+  - omakapital
+    - omakapitali rentaablus,%
+  - loodud lisandväärtus (antud metoodikas kasum + tööjõukulu)
+
+Iga ettevõtte jaoks arvutatakse iga näitaja kohta z-skoor. St leitakse keskväärtus:
+$$\bar{x_k}=\frac{\sum_{i=1}^{n}x_{ki}}{n_k} $$
+ja standardhälve:
+$$S_k=\sqrt{\frac{\sum_{i=1}^{n}(x_{ki}-\bar{x_k})^2}{n_k}} $$
+Ja väärtus iga ettevõtte jaoks:
+$$y_{k,i}=\frac{x_{ki}-\bar{x_{k}}}{S_k} $$
+
+Juhendis on olemas erireeglid, kuidas näitajaid ülalt või alt tsenseeritakse.
+
+Metoodika on pisut ebaselge, kuidas näitajaid kokku võetakse. Ühes kohas kirjeldatakse, et ettevõtete järjestus edetabelis leitakse iga ettevõtte standardiseeritud näitajate kokkuliitmise teel. Mida suurem on liitmise teel saadud sünteetiline näitarv, seda kõrgem on ettevõtte koht edetabelis. Ettevõte, kelle vastav näitarv on suurim, on kõige edukam (konkurentsivõimelisem) ettevõte.
+
+$$Y=\sum_{k=1}^{K}y_k $$
+
+Teises kohas öelda, et ettevõtted saavad iga näitaja järgi kohapunktid ja edetabeli tegemisel liidetakse kokku kohapunktide summad.
+
+Arvestust peetakse eraldi kolmes lõikes:
+
+  1. Suurettevõtted, mille müügitulu on ühe 50 miljoni euro või mille töötajate arv oli üle 250 või mille omakapital (kahe viimase majandusaasta lõpu seisude keskmine) oli üle (?) 20 miljoni euro.
+  2. Väike‐ ja keskmised ettevõtted - kes ei ole suur- ega mikroettevõtted.
+  3. Mikroettevõtted, kus on alla 10 töötaja ja mille müügitulu viimasel majandusaastal oli alla 2 miljoni euro.
+  
+Ülaltoodud näitajad ei sisalda näiteks ekspordiindikaatoreid. Osaliselt on see tingitud sellest, et eksportijatel veel omaette konkurss.
+
+
+### Sotsiaalsete ettevõtete võrgustik
+
+2011. aastal toimunud sotsiaalsete ettevõtete võrgustiku Asutava Kogu kohtumisel pakuti välja, et sotsiaalsete ettevõtete elujõulisust iseloomustavad:  
+  - käive, 
+  - kasumlikkus jt finantsmõõdikud; 
+  - ettevõtete palgatase võrreldes teiste sektoritega; 
+  - uute sotsiaalsete ettevõtete ellujäämise protsent; 
+  - organisatsioonide suutlikkus (mõne indeksi põhjal); 
+  - personali voolavus ja rahulolu; 
+  - juhtide töökogemus.
+    
+Vt (http://sev.ee/avasta/ajalugu/projektist/tulemused/eesmargid-tegevused/)
+
+### Eesti Pank
+
+Eesti Pank näib rõhutavat ettevõtete kasumlikkust kui ettevõtete elujõulisuse peamist indikaatorit, ohumärgina nähakse seda, kui  ettevõtete kasum kasvab aeglasemalt kui tööjõukulud. Enamasti räägitakse teemast küll makrotasemel. Vt näiteks [Ettevõtete kasumlikkus Eestis, 2016](https://www.eestipank.ee/blogi/ettevotete-kasumlikkus-eestis), kus  mõõdetakse kvartaalseid muutusi võrreldes eelmise aasta sama kvartaliga.
+Makrotasemel jägib Eesti Pank veel teraselt ettevõtete investeeringute osakaalu SKPs. Vt [Madal investeerimismäär piirab Eesti majanduse kasvuvõimet](https://www.eestipank.ee/blogi/madal-investeerimismaar-piirab-eesti-majanduse-kasvuvoimet)
+
+### Töötukassa
+
+Töötukassa on analüüsinud [ettevõtluse alustamisel antud toetuste mõju](https://www.tootukassa.ee/sites/tootukassa.ee/files/EvATanalyys_30052014.pdf) ja on kasutanud seal peamiselt ettevõtete ellujäämismäära, kuid ka töötajate arvu, müügitulu ja ärikasumit.
+
+### Euroopa Komisjon
+
+Euroopa Komisjoni õiguslikes dokumentides, mis puudutab konkurentsivõimet, kasutatakse terminit _viability_.
+See aga näib viitavat sellele, kas ettevõte jääb ellu ka ilma riigi toetuseta.
+
+### Arengufond
+
+Arengufond on osalenud rahvusvahelistes ettevõtlusuuringutes GEM (Global Entrepreneurship Monitoring) ja GEDI (Rahvusvaheline Ettevõtluse Arenguindeks - Global Entrepreneurship Development Index). Kuid need tuginevad küsitlusuuringutele ja rõhutavad palju kvalitatiivseid oskusi. Nende järgi on Eesti peamisteks probleemideks ettevõtete madal võimekus luua kõrget lisandväärtus, mida piirab olulise pudelikaelana ettevõtjate madal motivatsioon tegeleda innovatsiooniga ja õbluke oskusteave.
+[Arengufond, 2014](http://www.arengufond.ee/2014/11/rahvusvahelised-ettevotlusuuringud-eesti-ettevotluspotentsiaal-on-tugev-pudelikaelaks-on-ettevotjate-oskused-ja-uhiskondlikud-hoiakud/)
+
+
+# Projekti kohtumistel arutatud metoodika 
+## CITISe koosolekul 28. juuni arutletud metoodika
+
+Kasutatakse Konjuktuuriinsituudi lähenemist lähtekohana:
+
+  a) Leiame KMD ja TSD andmete põhjal sarnased indikaatorid
+  b) Indikaatorid võiks leida viimase kolme kuu keskmise näitajana, dünaamika puhul võrdleme 12 kuu taguse kolme-kuu keskmisega.
+  c) Indikaatorid tuleb viia sarnasele skaalale - kas standardiseerida või muul moel
+  d) Koondindikaatori leidmisel summeerime kokku üksikud indikaatorid. Kaalud on vaikimisi võrdsed, aga neid saab rakenduses kasutaja muuta
+  e) Koondindikaatorit võiks leida eraldi väikeste ettevõtete ja hiljuti alustanud ettevõtete lõikes
+  
+Hilisemalt võib kaaluda:
+
+  - kasutades peakomponentide meetodit, leida indikaatorites ühisosa
+  - võrrelda indikaatorite põhjal leitud näitajate keskmist dünaamikat ettevõtete elulemusnäitajatega, mida Eurostat avaldab
+  - testida, kas taoliselt leitud indikaator aitab prognoosida ettevõtte edukust või lõpetamist tulevikus
+
+## EMTA koosolekul 29. juuni arutletud
+
+  a) Nõustuti, et võtame aluseks Kaubandus-Tööstuskoja/Konjunktuuriinstituudi lähenemises kasutatud tunnused
+  b) Mihkel: võiks lisada juurde veel võrgustiku mingi osaindikaator  
+     Risto: võiks lisada väikse osakaaluga ka maksuvõla näitaja
+  c) Esialgu panna osaindikaatoritele vaikimisi kaal, mida kasutaja saab soovi korral ise muuta.
+  d) Indikaatorit saab analüüsida üle aja või võrreldes teiste ettevõtetega. 
+  e) Tuleks valideerida indikaatorit ettevõtte tegeliku lõpetamise tõenäosuse kirjeldamisel 
+  
+
+<!-- #################################################### -->
+<!-- #################################################### -->
+<!-- #################################################### -->
+
+# Analüüs
+
+## EMTA mikroandmete põhjal indikaatorite tegemine
+
+Järgnevalt on kirjeldatud, kuidas EMTA KMD ja TSD deklaratsiooni tunnuste põhjal on arvutatud ülaltoodud indikaatorite lähendid. Omakapitali rentaablusele head lähendit deklaratsiooniandmete puhul leida ei ole võimalik ja see on välja jäetud.
+
+### Müügitulu   
+Siin on esimene otsustamise koht, kas kasutada kogumüüki koos või ilma maksuvaba käibeta. Kui jätta maksuvaba käive välja, siis ei saa kasutada antud metoodikat sektorite jaoks, kus see on olulisel kohal (nt tervishoiuteenused, sideteenused, finantsteenused). Kui võtta maksuvaba käibe sisse, siis ülehindame lisandväärtust (ja kasumit) nende sektorite jaoks, sest meil puudub info sisendkulude kohta, mis on tehtud maksuvaba käibe tekitamiseks. (Vt ka järgmist punkti kasumi arvutamise kohta.)
+
+Kaupade, teenuste müügitulu aruandeaastal: 
+`Kogumüük maksuvaba käibeta = Kogumyyk_maksuvaba_kaibeta = (r1+r2+r3+r9)-(r6+r7)`
+Müügitulu suhteline muutumine võrreldes eelmise aastaga: `Kogumüük maksuvaba käibeta (t) / Kogumüük maksuvaba käibeta (t-12)`
+
+<!-- $$Kogumyyk\_maksuvaba\_kaibeta_t/Kogumyyk\_maksuvaba\_kaibeta_{t-12} -1$$ -->
+
+### Loodud lisandväärtus
+Loodud lisandväärtus on leitud konjunktuuriinstituudi metoodika puhul kui kasum pluss tööjõukulu.  
+Meie kasutada olevate andmete järgi on valem järgmine.
+`Lisandväärtus  = Kasum + tööjõukulu`
+`               = Kogumüük maksuvaba käibeta - vahetarbimine - investeeringud põhivarasse`   
+`               = Kogumyyk_maksuvaba_kaibeta - kogusoetus_ilma_PV_soetuseta - Pohivara_soetus`
+`               = (r1+r2+r3+r9)-(r6+r7)  - (r5-r5.2)/maksumäär - r5.2/maksumäär`
+
+(Kommentaar: siin ja edaspidi võib kaaluda muutuja `Tootasu_summa` asemel kasutada näitajat `VALJAMAKSESUMMA`)
+
+Ülal valemis toodud _maksumäär_ võib olla kas nominaalne maksumäär (20% või varasemalt 18%), ettevõtte müügi keskmine maksumäär või Eesti keskmine müügi maksumäär. Viimased kaks püüavad arvestada, et osa sisendeid võib olla soetatud madalama maksumääraga. Hetkel on kasutatud EMTA pootl valmis tehtud näitajaid, mis kasutab nominaalset maksumäära.
+
+### Kasum
+Kasumi lähendi leidmiseks lahutame kogumüügist maha kogusoetuse (vahetarbimise ja investeeringud põhivarasse) ja tööjõukulud. 
+
+`Kasum  = Kogumüük maksuvaba käibeta - vahetarbimine - investeeringud põhivarasse - tööjõukulu`   
+`       = Kogumyyk_maksuvaba_kaibeta - kogusoetus_ilma_PV_soetuseta - Pohivara_soetus - Tootasu_summa*1.33`
+`       = (r1+r2+r3+r9)-(r6+r7)  - (r5-r5.2)/maksumäär - r5.2/maksumäär - (vana TSD ridade S1,S11 ja S15 summa)*1.33`
+
+(Kommentaar: Võib lisada ka töötuskindlustusmakse määra, aga see muutub sageli.)
+
+Kasumi muutumine võrreldes eelmise aastaga on lihtsalt muutus: `Kasum (t) / Kasum (t-12)`
+
+<!-- $$kasum_t/kasum_{t-12}-1 $$  -->
+
+Kasumi puhul on oluline meeles pidada mitut asja:
+
+a) EMTA andmetel ei ole võimalik vahetarbimist ja seega ka lisaväärtust või kasumit arvutada ettevõtetele ja sektoritele, kus peamine müük on maksuvaba (nt tervishoiuteenused, sideteenused, finantsteenused). Maksuvaba käibe kohta on küll info KMD-l olemas, kuid puudub info kulude kohta, sest neid deklareeritakse vaid sisendkäibemaks, mis on vajalik käibemaksuga maksustatud müügi tekitamiseks. Seega jääb kaks võimalust, kas ülehinnata kasumit (kasutades müüginäitajana käivet koos maksuvaba käibega) või alahinnata kasumit (kasutades müüginäitajana käivet ilma maksuvaba käibeta)
+b) EMTA andmetel kasumi arvutamisest jäävad välja kõik mittedeklareeritud kulud ja tulud, nt finantskulud, aktsiisimaksud ja riigilõivud jmt
+c) EMTA andmetel kasumi leidmisel lahutame maha kogu põhivara soetuse antud kuul, samas kui klassikaliselt kasumi leidmisel lahutame maha amortisatsiooni.
+
+### Tööjõukulu ja tootlikkus
+`Keskmine tööjõukulu ühe töötaja kohta kuus = Tööjõukulu kokku / Töötasu saajate arv`
+`                                           = Tootasu_summa*1.33/Tootasusaajate_arv`
+
+(Kommentaar: võib kaaluda ka suhtarvu VALJAMAKSESUMMA/Inimesi_TSD_kokku)
+
+`Tootlikkus ühe töötaja kohta = Kogumüük maksuvaba käibeta / Tööjõukulu kokku`
+`                             = Kogumyyk_maksuvaba_kaibeta/(Tootasu_summa*1.33)`
+
+
+### Investeeringud
+`Investeeringud aruandeaastal = Põhivara soetus`
+`                             = Pohivara_soetus = r5.2/maksumäär`
+
+
+### Teisendused: libiseva keskmise kasutamine, puuduvad väärtused
+    
+  - Kõikide näitajate puhul kasutatakse viimase kolme kuu keskmist näitajat. Suhtarvude leidmisel leitakse esmalt   nimetaja ja lugeja kolme kuu keskmised ning seejärel nende suhe. (Alternatiiv oleks leida suhtarvude kolme kuu keskmised.)  
+  - Puuduvad väärtuste puhul eeldatakse, et tegemist on nulliga (nt puudus põhivara soetus, puudusid töötasu saavad töötajad jmt.
+  - Erakordselt suurte väärtuste puhul kasutatakse piiride peale panemist analoogselt eespool viidatud konjunktuuriinstituudi metoodikaga.  
+
+
+
+
+```{r andmed, eval=FALSE, include=FALSE}
+#Andmete tegemine; jäta see osa vahele, kui andmed tehtud, väga aeglane
+
+load(paste0(datapath, "tsd_data_artid"))
+load(paste0(datapath, "kmd_data_artid"))
+#kontroll, kas kõik andmed olemas - ei mäleta, kas FIEd olid siit juba väljas
+ table(year(kmd_artid$kpv))
+ table(year(tsd_artid$kpv))
+#paneme andmed kokku, jätame alles vaid KMD esitanud firmad
+df <-  merge(tsd_artid, kmd_artid, by=c("kpv", "ART_ID"), all.y = TRUE)
+rm(kmd_artid, tsd_artid)
+save(df, file=paste0(datapath, "elujoulisus"))
+
+```
+
+```{r indic, eval=FALSE, include=FALSE}
+load(paste0(datapath, "elujoulisus"))
+
+#Teeme kõikidest näitajatest kolme kuu libisevad keskmised
+#võib teha käsitsi, aga võib kasutada ka mõnda funktsiooni
+library(zoo)  #käsu rollmean jaoks ja yearmon jaoks
+library(stats)  #käsu ave jaoks
+library(timeSeries) #käsk rollMean
+
+
+#jätame alles tunnused, mida on vaja näitajate arvutamiseks või hilisemaks jaotuste tegemiseks
+#alustame aastast 2010, sest enne oli deklaratsioon teistsugune
+ 
+#tsdwide$aeg=as.yearmon(paste(tsdwide$kuu, tsdwide$aasta), "%m %Y")
+
+df <- df %>% dplyr::filter(year(kpv)>=2010) %>%  mutate(year=year(kpv), month=month(kpv)) %>%  dplyr::select(ART_ID, SEKTOR, year, month, kpv, Kogumyyk_maksuvaba_kaibeta, Kogumyyk_maksuvaba_kaibega, Inimesi_TSD_kokku, Tootasusaajate_arv, Tootasu_summa, VALJAMAKSESUMMA, Pohivara_soetus, lisandunud_vaartus_summa, Kogu_soetus, kogusoetus_ilma_PV_soetuseta)
+
+#kuumuutuja juurde, võib panna ülal muidugi
+df <- df %>% dplyr::mutate(yearmonth=as.yearmon(paste(year, month), "%Y %m")) %>%  arrange(ART_ID, yearmonth)
+
+POOLELI
+
+#Asendame NA nullidega, sest tegu on minu arust sisuliste nullidega
+df[is.na(df)] <-  0
+
+#kolme kuu viitaeg
+df <-  df %>%  group_by(ART_ID) %>%  mutate_at(vars(Kogumyyk_maksuvaba_kaibeta, Kogumyyk_maksuvaba_kaibega), funs(av3= (. + lag(.,1) + lag(.,2))/3))
+tmp <-  df %>%  select(starts_with("Kogumyyk"),starts_with("av3"))
+
+  
+df$Kogumyyk_maksuvaba_kaibeta3 <- ave(df$Kogumyyk_maksuvaba_kaibeta, df$ART_ID, FUN = function(x) rollmean(x, k=3, align="right", na.pad=T))
+
+
+andmestik <- andmestik %>%
+      #viimane teadaolev väärtus ja viimane diferents
+      dplyr::mutate_at(vars(starts_with("x")), funs(lag_h=lag(.,h_int), d12lag_h=lag(.,h_int)-lag(.,h_int+12))) %>%
+    #kui h_int on 12, siis võta vaid üks neist. kas üldse võtta?
+        if (h_int==12) {dplyr::mutate(target_lag_12=lag(target,12))} else {
+        dplyr::mutate(target_lag_12=lag(target,12))  %>%
+        dplyr::mutate(target_lag_h=lag(target,h_int))
+      }
+          
+    andmestik <- andmestik[,!(colnames(andmestik) %in% c("x1", "x2", "x3", "x4", "x5"))]
+
+
+
+#agregeerime kokku üle aasta ja leiame suhtarvud
+#siia tuleb hiljem teha 3 aasta libisev keskmine
+tmp <-  df %>% group_by(ART_ID, year) %>% summarise_at(vars(Kogumyyk_maksuvaba_kaibega, Inimesi_TSD_kokku, VALJAMAKSESUMMA, Pohivara_soetus, lisandunud_vaartus_summa), funs(sum)) %>%  mutate(kasum=lisandunud_vaartus_summa-VALJAMAKSESUMMA, tootlikkus=Kogumyyk_maksuvaba_kaibega/Inimesi_TSD_kokku, keskmtoojoukulu=VALJAMAKSESUMMA/Inimesi_TSD_kokku)
+
+#suhtarvude leidmisel tekkinud probleemid
+tmp$keskmtoojoukulu[is.infinite(tmp$keskmtoojoukulu)]<-NA
+tmp$keskmtoojoukulu[is.nan(tmp$keskmtoojoukulu)]<-NA
+tmp$tootlikkus[is.infinite(tmp$tootlikkus)]<-NA
+tmp$tootlikkus[is.nan(tmp$tootlikkus)]<-NA
+
+
+#viime laiale kujule, et saaks 2015 ja 2016 suhet leida. saaks teha ka teisiti
+tmp <-  melt(tmp, id.vars=c("ART_ID", "year"))
+tmp <- dcast(tmp, ART_ID ~ variable+year, value.var="value")
+
+#juurdekasvud
+tmp2 <-  tmp %>% mutate(gKogumyyk_maksuvaba_kaibega=Kogumyyk_maksuvaba_kaibega_2016/Kogumyyk_maksuvaba_kaibega_2015-1,gkasum=kasum_2016/kasum_2015-1) %>% 
+dplyr:: select(ART_ID, Kogumyyk_maksuvaba_kaibega_2016, gKogumyyk_maksuvaba_kaibega, gkasum, kasum_2016, Pohivara_soetus_2016, lisandunud_vaartus_summa_2016, tootlikkus_2016, keskmtoojoukulu_2016)
+
+#puhastamine
+tmp2$gKogumyyk_maksuvaba_kaibega[is.infinite(tmp2$gKogumyyk_maksuvaba_kaibega)]<-NA
+tmp2$gKogumyyk_maksuvaba_kaibega[is.nan(tmp2$gKogumyyk_maksuvaba_kaibega)]<-NA
+tmp2$gkasum[is.infinite(tmp2$gkasum)]<-NA
+tmp2$gkasum[is.nan(tmp2$gkasum)]<-NA
+#kunstlik piiramine alt ülevalt - ad hoc
+tmp2$gkasum[tmp2$gkasum>3]<-3
+tmp2$gKogumyyk_maksuvaba_kaibega[tmp2$gKogumyyk_maksuvaba_kaibega>3]<-3
+#negatiivsed numbrid nulliks?
+tmp2$gkasum[tmp2$gkasum<0]<-0
+tmp2$gKogumyyk_maksuvaba_kaibega[tmp2$gKogumyyk_maksuvaba_kaibega<0]<-0
+
+#standardiseerimine
+tmp2 <-  tmp2 %>% mutate_at(colnames(tmp2[,!(colnames(tmp2) %in% c("ART_ID"))]), funs((.-mean(., na.rm=TRUE))/sd(., na.rm=TRUE)))
+
+#seome tagasi taustaandmed
+emtak=read.csv(paste0(datapath,"ISIKAID_EMTAK_MK.tab"),sep="\t", header=T)
+tmp3 <-  merge(tmp2,emtak, by="ART_ID", all.x=TRUE)
+
+#teeme koondindikaatori liites näitajad kokku
+tmp3 <-  tmp3 %>%  mutate(koond=Kogumyyk_maksuvaba_kaibega_2016 + gKogumyyk_maksuvaba_kaibega + gkasum + kasum_2016+ Pohivara_soetus_2016+ lisandunud_vaartus_summa_2016+ tootlikkus_2016+ keskmtoojoukulu_2016)
+
+ggplot(tmp3, aes(SEKTOR, koond))+ 
+  geom_boxplot()+
+  coord_flip()
+
+ggplot(tmp3, aes(SEKTOR, Kogumyyk_maksuvaba_kaibega_2016))+ 
+  geom_boxplot()+
+  coord_flip()
+
+ggplot(tmp3, aes(SEKTOR, kasum_2016))+ 
+  geom_boxplot()+
+  coord_flip()
+
+ggplot(tmp3, aes(SEKTOR, Pohivara_soetus_2016))+ 
+  geom_boxplot()+
+  coord_flip()
+
+ggplot(tmp3, aes(SEKTOR, lisandunud_vaartus_summa_2016))+ 
+  geom_boxplot()+
+  coord_flip()
+
+ggplot(tmp3, aes(SEKTOR, tootlikkus_2016))+ 
+  geom_boxplot()+
+  coord_flip()
+
+ggplot(tmp3, aes(SEKTOR, keskmtoojoukulu_2016))+ 
+  geom_boxplot()+
+  coord_flip()
+
+```
+
+                          
+```{r jaagid, eval=FALSE, include=FALSE}
+
+# http://www.tablesgenerator.com/markdown_tables#
+
+#df <- df %>% dplyr::filter(year(kpv)>=2010) %>%  mutate(year=year(kpv)) %>%  dplyr::select(ART_ID, SEKTOR, year, Kogumyyk_maksuvaba_kaibega, Inimesi_TSD_kokku, VALJAMAKSESUMMA, Pohivara_soetus, lisandunud_vaartus_summa) 
+
+#leiame suhtelise muutuse võrreldes eelmise perioodiga
+#tmp2 <-  tmp %>%  dplyr::mutate_at(colnames(tmp[,!(colnames(tmp) %in% c("ART_ID"))]), funs(g=./dplyr::lag(.,1)-1))
+
+```

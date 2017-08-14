@@ -6,6 +6,7 @@ rm(list = ls(all = TRUE))
 
 #lae paketid
 library(ggplot2) 
+library(dplyr)
 
 #andmed on võetud ESA andmebaasist
 setwd("C:\\Users\\avork\\Documents\\GitHub\\varia\\")
